@@ -1,19 +1,33 @@
 set(CMAKE_SYSTEM_NAME               Generic)
 set(CMAKE_SYSTEM_PROCESSOR          arm)
 
+include("${CMAKE_CURRENT_LIST_DIR}/stm32cubeclt.cmake")
+
 set(CMAKE_C_COMPILER_ID GNU)
 set(CMAKE_CXX_COMPILER_ID GNU)
 
-# Some default GCC settings
-# arm-none-eabi- must be part of path environment
-set(TOOLCHAIN_PREFIX                arm-none-eabi-)
+# Prefer STM32CubeCLT, then fall back to tools available in PATH.
+find_program(ARM_NONE_EABI_GCC NAMES arm-none-eabi-gcc
+    HINTS ${_STM32_GNU_HINTS} REQUIRED)
+find_program(ARM_NONE_EABI_GXX NAMES arm-none-eabi-g++
+    HINTS ${_STM32_GNU_HINTS} REQUIRED)
+find_program(ARM_NONE_EABI_OBJCOPY NAMES arm-none-eabi-objcopy
+    HINTS ${_STM32_GNU_HINTS} REQUIRED)
+find_program(ARM_NONE_EABI_SIZE NAMES arm-none-eabi-size
+    HINTS ${_STM32_GNU_HINTS} REQUIRED)
 
-set(CMAKE_C_COMPILER                ${TOOLCHAIN_PREFIX}gcc)
+# A clean command-line configure also works when Ninja is not in PATH.
+if(CMAKE_GENERATOR MATCHES "Ninja" AND NOT CMAKE_MAKE_PROGRAM)
+    find_program(CMAKE_MAKE_PROGRAM NAMES ninja
+        HINTS ${_STM32_NINJA_HINTS} REQUIRED)
+endif()
+
+set(CMAKE_C_COMPILER                "${ARM_NONE_EABI_GCC}")
 set(CMAKE_ASM_COMPILER              ${CMAKE_C_COMPILER})
-set(CMAKE_CXX_COMPILER              ${TOOLCHAIN_PREFIX}g++)
-set(CMAKE_LINKER                    ${TOOLCHAIN_PREFIX}g++)
-set(CMAKE_OBJCOPY                   ${TOOLCHAIN_PREFIX}objcopy)
-set(CMAKE_SIZE                      ${TOOLCHAIN_PREFIX}size)
+set(CMAKE_CXX_COMPILER              "${ARM_NONE_EABI_GXX}")
+set(CMAKE_LINKER                    "${ARM_NONE_EABI_GCC}")
+set(CMAKE_OBJCOPY                   "${ARM_NONE_EABI_OBJCOPY}")
+set(CMAKE_SIZE                      "${ARM_NONE_EABI_SIZE}")
 
 set(CMAKE_EXECUTABLE_SUFFIX_ASM     ".elf")
 set(CMAKE_EXECUTABLE_SUFFIX_C       ".elf")

@@ -1,0 +1,48 @@
+# CLion / JetBrains per-user project state
+.idea/
+.run/
+
+# CMake build trees and generated metadata
+build/
+cmake-build-*/
+out/
+CMakeUserPresets.json
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+compile_commands.json
+CTestTestfile.cmake
+Testing/
+_deps/
+
+# Ninja / Make generated files
+.ninja_deps
+.ninja_log
+build.ninja
+rules.ninja
+Makefile
+
+# Embedded build products
+*.elf
+*.hex
+*.bin
+*.map
+*.list
+*.lst
+*.d
+*.o
+*.obj
+*.a
+*.su
+
+# STM32CubeMX generated backups
+*.ioc.bak
+*.mxproject.bak
+*.bak
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+*~
