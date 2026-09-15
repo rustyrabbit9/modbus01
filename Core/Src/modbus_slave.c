@@ -26,6 +26,9 @@
 #define SIMULATED_CURRENT_MA       1500U
 #define SIMULATED_VOLTAGE_CENTIVOLT 2400U
 
+#define MODBUS_CRC16_INITIAL_VALUE  0xFFFFU
+#define MODBUS_CRC16_POLYNOMIAL     0xA001U
+
 static UART_HandleTypeDef *modbus_uart;
 static uint8_t uart_rx_byte;
 static volatile uint8_t rx_ring[MODBUS_RX_RING_SIZE];
@@ -36,7 +39,7 @@ static uint8_t request_length;
 
 static uint16_t Modbus_Crc16(const uint8_t *data, uint16_t length)
 {
-  uint16_t crc = 0xFFFFU;
+  uint16_t crc = MODBUS_CRC16_INITIAL_VALUE;
 
   for (uint16_t index = 0U; index < length; ++index)
   {
@@ -45,7 +48,7 @@ static uint16_t Modbus_Crc16(const uint8_t *data, uint16_t length)
     {
       if ((crc & 0x0001U) != 0U)
       {
-        crc = (crc >> 1U) ^ 0xA001U;
+        crc = (crc >> 1U) ^ MODBUS_CRC16_POLYNOMIAL;
       }
       else
       {
