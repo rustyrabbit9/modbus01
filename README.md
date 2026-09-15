@@ -51,8 +51,15 @@ py -3 -m pip install -r requirements.txt
 py -3 tools/pcan_modbus_test.py
 ```
 
-The defaults are `PCAN_USBBUS1`, 500 kbit/s, standard CAN ID `0x219`, and a
-two-second response timeout. The script queries temperature, current, and
-voltage, prints every received CAN frame, verifies the Modbus CRC, and decodes
-valid replies. Use `py -3 tools/pcan_modbus_test.py --help` for channel, CAN ID,
-response ID, and timeout options.
+The defaults are `PCAN_USBBUS1`, 500 kbit/s, request IDs `0x219`/`0x220`/`0x221`,
+response IDs `0x331`/`0x332`/`0x333`, and a two-second response timeout. The
+script queries temperature, current, and voltage, prints every received CAN
+frame, verifies the Modbus CRC, and decodes valid replies. Use
+`py -3 tools/pcan_modbus_test.py --help` for channel, CAN ID, response ID, and
+timeout options.
+
+Configure the CS-CANET100 for bidirectional `transparent conversion with
+identifier`, standard frame, CAN ID start position `1`, ID length `2`, and a
+serial-frame character gap of `10`. The STM32 prefixes each UART response with
+the two-byte response CAN ID; the converter extracts that prefix, leaving the
+normal Modbus RTU bytes in the CAN payload.

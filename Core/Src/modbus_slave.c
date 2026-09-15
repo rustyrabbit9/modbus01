@@ -8,11 +8,18 @@
 #define MODBUS_REQUEST_SIZE        8U
 #define MODBUS_RX_RING_SIZE        64U
 #define MODBUS_UART_TIMEOUT_MS     100U
-#define MODBUS_RESPONSE_DELAY_MS   5U
+#define MODBUS_RESPONSE_DELAY_MS   30U
+#define MODBUS_MAX_RESPONSE_SIZE   7U
+#define CAN_ID_PREFIX_SIZE         2U
 
 #define INPUT_REGISTER_TEMPERATURE 0x0000U
 #define INPUT_REGISTER_CURRENT     0x0001U
 #define INPUT_REGISTER_VOLTAGE     0x0002U
+
+#define RESPONSE_CAN_ID_EXCEPTION  0x330U
+#define RESPONSE_CAN_ID_TEMPERATURE 0x331U
+#define RESPONSE_CAN_ID_CURRENT     0x332U
+#define RESPONSE_CAN_ID_VOLTAGE     0x333U
 
 /* Fixed simulated values: 25.0 C, 1.500 A and 24.00 V. */
 #define SIMULATED_TEMPERATURE      250U
@@ -50,17 +57,31 @@ static uint16_t Modbus_Crc16(const uint8_t *data, uint16_t length)
   return crc;
 }
 
-static void Modbus_Send(const uint8_t *data, uint16_t length)
+static void Modbus_Send(const uint8_t *data, uint16_t length, uint16_t can_id)
 {
+  uint8_t serial_frame[CAN_ID_PREFIX_SIZE + MODBUS_MAX_RESPONSE_SIZE];
+
+  if (length > MODBUS_MAX_RESPONSE_SIZE)
+  {
+    return;
+  }
+
   /*
-   * Keep the RS485 bus in receive mode long enough for the CAN/RS485 bridge
-   * to release its driver and switch to receive mode. At 9600 8N1, 3.5
-   * character times are about 3.65 ms, so 5 ms gives a safe turnaround gap.
+   * CS-CANET100 "transparent conversion with identifier" extracts the first
+   * two serial bytes as a standard CAN ID. These bytes are not part of the
+   * CAN payload, so PCAN still receives the original Modbus RTU response.
    */
+  serial_frame[0] = (uint8_t)(can_id >> 8U);
+  serial_frame[1] = (uint8_t)(can_id & 0x00FFU);
+  memcpy(&serial_frame[CAN_ID_PREFIX_SIZE], data, length);
+
+  /* Let a short burst of CAN-to-RS485 requests finish before driving the bus. */
   HAL_Delay(MODBUS_RESPONSE_DELAY_MS);
   HAL_GPIO_WritePin(RS485_DE_GPIO_Port, RS485_DE_Pin, GPIO_PIN_SET);
 
-  if (HAL_UART_Transmit(modbus_uart, data, length, MODBUS_UART_TIMEOUT_MS) == HAL_OK)
+  if (HAL_UART_Transmit(modbus_uart, serial_frame,
+                        length + CAN_ID_PREFIX_SIZE,
+                        MODBUS_UART_TIMEOUT_MS) == HAL_OK)
   {
     while (__HAL_UART_GET_FLAG(modbus_uart, UART_FLAG_TC) == RESET)
     {
@@ -81,7 +102,7 @@ static void Modbus_SendException(uint8_t function, uint8_t exception_code)
   crc = Modbus_Crc16(response, 3U);
   response[3] = (uint8_t)(crc & 0x00FFU);
   response[4] = (uint8_t)(crc >> 8U);
-  Modbus_Send(response, sizeof(response));
+  Modbus_Send(response, sizeof(response), RESPONSE_CAN_ID_EXCEPTION);
 }
 
 static void Modbus_ProcessRequest(const uint8_t *frame)
@@ -89,6 +110,7 @@ static void Modbus_ProcessRequest(const uint8_t *frame)
   uint16_t register_address;
   uint16_t register_count;
   uint16_t register_value;
+  uint16_t response_can_id;
   uint16_t crc;
   uint8_t response[7];
 
@@ -116,14 +138,17 @@ static void Modbus_ProcessRequest(const uint8_t *frame)
   {
     case INPUT_REGISTER_TEMPERATURE:
       register_value = SIMULATED_TEMPERATURE;
+      response_can_id = RESPONSE_CAN_ID_TEMPERATURE;
       break;
 
     case INPUT_REGISTER_CURRENT:
       register_value = SIMULATED_CURRENT_MA;
+      response_can_id = RESPONSE_CAN_ID_CURRENT;
       break;
 
     case INPUT_REGISTER_VOLTAGE:
       register_value = SIMULATED_VOLTAGE_CENTIVOLT;
+      response_can_id = RESPONSE_CAN_ID_VOLTAGE;
       break;
 
     default:
@@ -139,7 +164,7 @@ static void Modbus_ProcessRequest(const uint8_t *frame)
   crc = Modbus_Crc16(response, 5U);
   response[5] = (uint8_t)(crc & 0x00FFU);
   response[6] = (uint8_t)(crc >> 8U);
-  Modbus_Send(response, sizeof(response));
+  Modbus_Send(response, sizeof(response), response_can_id);
 }
 
 void ModbusSlave_Init(UART_HandleTypeDef *uart)

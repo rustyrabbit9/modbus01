@@ -25,6 +25,8 @@ READ_INPUT_REGISTERS = 0x04
 class Query:
     key: str
     label: str
+    request_id: int
+    response_id: int
     request: bytes
     scale: float
     unit: str
@@ -32,9 +34,9 @@ class Query:
 
 
 QUERIES = (
-    Query("temperature", "温度", bytes.fromhex("01 04 00 00 00 01 31 CA"), 0.1, "°C", True),
-    Query("current", "电流", bytes.fromhex("01 04 00 01 00 01 60 0A"), 0.001, "A"),
-    Query("voltage", "电压", bytes.fromhex("01 04 00 02 00 01 90 0A"), 0.01, "V"),
+    Query("temperature", "温度", 0x219, 0x331, bytes.fromhex("01 04 00 00 00 01 31 CA"), 0.1, "°C", True),
+    Query("current", "电流", 0x220, 0x332, bytes.fromhex("01 04 00 01 00 01 60 0A"), 0.001, "A"),
+    Query("voltage", "电压", 0x221, 0x333, bytes.fromhex("01 04 00 02 00 01 90 0A"), 0.01, "V"),
 )
 
 
@@ -140,8 +142,16 @@ def make_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--channel", default="PCAN_USBBUS1", help="PCAN 通道")
     parser.add_argument("--bitrate", type=int, default=500_000, help="CAN 波特率")
-    parser.add_argument("--tx-id", type=parse_int, default=0x219, help="发送 CAN ID")
-    parser.add_argument("--rx-id", type=parse_int, help="只接受指定响应 CAN ID；默认监听全部")
+    parser.add_argument(
+        "--tx-id",
+        type=parse_int,
+        help="覆盖三项默认发送 ID 0x219/0x220/0x221",
+    )
+    parser.add_argument(
+        "--rx-id",
+        type=parse_int,
+        help="覆盖三项默认响应 ID 0x331/0x332/0x333",
+    )
     parser.add_argument("--timeout", type=float, default=2.0, help="每次请求的等待秒数")
     parser.add_argument("--interval", type=float, default=0.2, help="三次请求之间的间隔秒数")
     parser.add_argument("--extended", action="store_true", help="使用 29 位扩展 CAN ID")
@@ -159,8 +169,7 @@ def main() -> int:
     queries = selected_queries(args.query)
 
     print(
-        f"打开 PEAK PCAN: channel={args.channel}, bitrate={args.bitrate}, "
-        f"TX_ID=0x{args.tx_id:X}"
+        f"打开 PEAK PCAN: channel={args.channel}, bitrate={args.bitrate}"
     )
     print("提示：请先关闭 PCAN-View，并确保转换器不是 Listen Only 模式。")
 
@@ -179,14 +188,16 @@ def main() -> int:
     try:
         print_bus_status(bus, "打开后状态")
         for index, query in enumerate(queries):
+            request_id = args.tx_id if args.tx_id is not None else query.request_id
+            response_id = args.rx_id if args.rx_id is not None else query.response_id
             message = can.Message(
-                arbitration_id=args.tx_id,
+                arbitration_id=request_id,
                 is_extended_id=args.extended,
                 data=query.request,
             )
             print(
-                f"\n[TX] 查询{query.label}: ID=0x{args.tx_id:X} "
-                f"DLC=8 DATA={hex_bytes(query.request)}"
+                f"\n[TX] 查询{query.label}: ID=0x{request_id:X} "
+                f"DLC=8 DATA={hex_bytes(query.request)}，等待 ID=0x{response_id:X}"
             )
             try:
                 bus.send(message, timeout=1.0)
@@ -194,7 +205,7 @@ def main() -> int:
                 print(f"  [发送失败] {exc}")
                 continue
 
-            if wait_for_response(bus, query, args.timeout, args.rx_id):
+            if wait_for_response(bus, query, args.timeout, response_id):
                 successes += 1
             print_bus_status(bus, "请求后状态")
 
