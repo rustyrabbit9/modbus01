@@ -57,6 +57,8 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
+#define RS485_DE_Pin GPIO_PIN_4
+#define RS485_DE_GPIO_Port GPIOD
 
 /* USER CODE BEGIN Private defines */
 

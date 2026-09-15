@@ -41,3 +41,18 @@ cmake --build build/Debug --target flash
 
 The default J-Link interface is SWD at 4 MHz. `LoadFile` performs programming
 and verification, followed by a second binary verification and target reset.
+
+## PCAN Modbus test
+
+Close PCAN-View, install the Python dependency, then run the test script:
+
+```powershell
+py -3 -m pip install -r requirements.txt
+py -3 tools/pcan_modbus_test.py
+```
+
+The defaults are `PCAN_USBBUS1`, 500 kbit/s, standard CAN ID `0x219`, and a
+two-second response timeout. The script queries temperature, current, and
+voltage, prints every received CAN frame, verifies the Modbus CRC, and decodes
+valid replies. Use `py -3 tools/pcan_modbus_test.py --help` for channel, CAN ID,
+response ID, and timeout options.
