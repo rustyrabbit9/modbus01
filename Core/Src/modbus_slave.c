@@ -9,15 +9,15 @@
  *  Example:
  *  Request
  *  CAN ID | slave addr | func | start reg addr | reg num | crc
- *  0220   | 01         | 04   | 00 02          | 00 01   | 90 0A
+ *  0220   | 01         | 03   | 00 02          | 00 01   | 25 CA
  *
  *  Response
  *  CAN ID | slave addr | func | bytes num | reg value | crc
- *  0333   | 01         | 04   | 02        | 09 60     | BF 48
+ *  0333   | 01         | 03   | 02        | 09 60     | BE 3C
  */
 
 #define MODBUS_SLAVE_ADDRESS       1U
-#define MODBUS_READ_INPUT_REGISTERS 0x04U
+#define MODBUS_READ_HOLDING_REGISTERS 0x03U
 #define MODBUS_REQUEST_SIZE        8U
 #define MODBUS_RX_RING_SIZE        64U
 #define MODBUS_UART_TIMEOUT_MS     100U
@@ -28,9 +28,9 @@
 /* Single response ID for every reply, data and exception alike. */
 #define RESPONSE_CAN_ID            0x0333U
 
-#define INPUT_REGISTER_TEMPERATURE 0x0000U
-#define INPUT_REGISTER_CURRENT     0x0001U
-#define INPUT_REGISTER_VOLTAGE     0x0002U
+#define HOLDING_REGISTER_TEMPERATURE 0x0000U
+#define HOLDING_REGISTER_CURRENT     0x0001U
+#define HOLDING_REGISTER_VOLTAGE     0x0002U
 
 /* Fixed simulated values: 25.0 C, 1.500 A and 24.00 V. */
 #define SIMULATED_TEMPERATURE      250U
@@ -132,7 +132,7 @@ static void Modbus_ProcessRequest(const uint8_t *frame)
     return;
   }
 
-  if (frame[1] != MODBUS_READ_INPUT_REGISTERS)
+  if (frame[1] != MODBUS_READ_HOLDING_REGISTERS)
   {
     Modbus_SendException(frame[1], 0x01U);
     return;
@@ -149,15 +149,15 @@ static void Modbus_ProcessRequest(const uint8_t *frame)
 
   switch (register_address)
   {
-    case INPUT_REGISTER_TEMPERATURE:
+    case HOLDING_REGISTER_TEMPERATURE:
       register_value = SIMULATED_TEMPERATURE;
       break;
 
-    case INPUT_REGISTER_CURRENT:
+    case HOLDING_REGISTER_CURRENT:
       register_value = SIMULATED_CURRENT_MA;
       break;
 
-    case INPUT_REGISTER_VOLTAGE:
+    case HOLDING_REGISTER_VOLTAGE:
       register_value = SIMULATED_VOLTAGE_CENTIVOLT;
       break;
 
@@ -167,7 +167,7 @@ static void Modbus_ProcessRequest(const uint8_t *frame)
   }
 
   response[0] = MODBUS_SLAVE_ADDRESS;
-  response[1] = MODBUS_READ_INPUT_REGISTERS;
+  response[1] = MODBUS_READ_HOLDING_REGISTERS;
   response[2] = 2U;
   response[3] = (uint8_t)(register_value >> 8U);
   response[4] = (uint8_t)(register_value & 0x00FFU);

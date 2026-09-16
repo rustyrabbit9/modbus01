@@ -45,7 +45,7 @@ and verification, followed by a second binary verification and target reset.
 ## Modbus RTU slave
 
 USART2 is a plain Modbus RTU slave at 9600 baud, 8N1, with RS485 DE driven by
-GPIO. It answers slave address `1`, function code `0x04` (read input
+GPIO. It answers slave address `1`, function code `0x03` (read holding
 registers), one register per request:
 
 | Register | Value                        |
