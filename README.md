@@ -59,10 +59,17 @@ gets a standard Modbus exception response.
 
 ## CS-CANET100 converter
 
-Configure the converter for bidirectional `transparent conversion`, standard
-frame, and a serial-frame character gap of `10`.
+Configure the converter for bidirectional `transparent conversion with
+identifier`, standard frame, CAN ID start position `1`, ID length `2`, and a
+serial-frame character gap of `10`.
 
-Do **not** use `transparent conversion with identifier`. In that mode the
-converter consumes the first two serial bytes as the CAN ID, which would strip
-the slave address and function code out of every response and leave a malformed
-RTU frame in the CAN payload.
+In this mode the converter consumes the first two serial bytes as the CAN ID,
+so the firmware prefixes every UART response with the fixed response ID
+`0x0333`. The prefix sits outside the Modbus CRC and never reaches the CAN
+payload, which therefore carries an unmodified RTU response. Dropping the
+prefix would make the converter eat the slave address and function code
+instead: a reply would arrive as ID `0x104` with payload
+`02 09 60 BF 48`.
+
+Requests arrive with their own two ID bytes prepended. The slave does not parse
+them; they fall out of the CRC resynchronisation in `ModbusSlave_Poll`.
