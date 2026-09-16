@@ -3,6 +3,19 @@
 #include "main.h"
 #include <string.h>
 
+/**
+ *  CAN ID is added by the converter, outside the CRC. CRC is low byte first.
+ *
+ *  Example:
+ *  Request
+ *  CAN ID | slave addr | func | start reg addr | reg num | crc
+ *  0220   | 01         | 04   | 00 02          | 00 01   | 90 0A
+ *
+ *  Response
+ *  CAN ID | slave addr | func | bytes num | reg value | crc
+ *  0333   | 01         | 04   | 02        | 09 60     | BF 48
+ */
+
 #define MODBUS_SLAVE_ADDRESS       1U
 #define MODBUS_READ_INPUT_REGISTERS 0x04U
 #define MODBUS_REQUEST_SIZE        8U
