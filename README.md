@@ -42,24 +42,27 @@ cmake --build build/Debug --target flash
 The default J-Link interface is SWD at 4 MHz. `LoadFile` performs programming
 and verification, followed by a second binary verification and target reset.
 
-## PCAN Modbus test
+## Modbus RTU slave
 
-Close PCAN-View, install the Python dependency, then run the test script:
+USART2 is a plain Modbus RTU slave at 9600 baud, 8N1, with RS485 DE driven by
+GPIO. It answers slave address `1`, function code `0x04` (read input
+registers), one register per request:
 
-```powershell
-py -3 -m pip install -r requirements.txt
-py -3 tools/pcan_modbus_test.py
-```
+| Register | Value                        |
+| -------- | ---------------------------- |
+| `0x0000` | temperature, 0.1 C units     |
+| `0x0001` | current, mA                  |
+| `0x0002` | voltage, 0.01 V units        |
 
-The defaults are `PCAN_USBBUS1`, 500 kbit/s, request IDs `0x219`/`0x220`/`0x221`,
-response IDs `0x331`/`0x332`/`0x333`, and a two-second response timeout. The
-script queries temperature, current, and voltage, prints every received CAN
-frame, verifies the Modbus CRC, and decodes valid replies. Use
-`py -3 tools/pcan_modbus_test.py --help` for channel, CAN ID, response ID, and
-timeout options.
+The values are simulated constants (25.0 C, 1.500 A, 24.00 V). Anything else
+gets a standard Modbus exception response.
 
-Configure the CS-CANET100 for bidirectional `transparent conversion with
-identifier`, standard frame, CAN ID start position `1`, ID length `2`, and a
-serial-frame character gap of `10`. The STM32 prefixes each UART response with
-the two-byte response CAN ID; the converter extracts that prefix, leaving the
-normal Modbus RTU bytes in the CAN payload.
+## CS-CANET100 converter
+
+Configure the converter for bidirectional `transparent conversion`, standard
+frame, and a serial-frame character gap of `10`.
+
+Do **not** use `transparent conversion with identifier`. In that mode the
+converter consumes the first two serial bytes as the CAN ID, which would strip
+the slave address and function code out of every response and leave a malformed
+RTU frame in the CAN payload.
