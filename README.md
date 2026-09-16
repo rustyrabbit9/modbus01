@@ -46,16 +46,22 @@ and verification, followed by a second binary verification and target reset.
 
 USART2 is a plain Modbus RTU slave at 9600 baud, 8N1, with RS485 DE driven by
 GPIO. It answers slave address `1`, function code `0x03` (read holding
-registers), one register per request:
+registers), up to six registers per request:
 
-| Register | Value                        |
-| -------- | ---------------------------- |
-| `0x0000` | temperature, 0.1 C units     |
-| `0x0001` | current, mA                  |
-| `0x0002` | voltage, 0.01 V units        |
+| Register          | Value                                   |
+| ----------------- | --------------------------------------- |
+| `0x0000`          | temperature, 0.1 C units                |
+| `0x0001`          | current, mA                             |
+| `0x0002`          | voltage, 0.01 V units                   |
+| `0x4002`-`0x4007` | year, month, day, hour, minute, second  |
 
-The values are simulated constants (25.0 C, 1.500 A, 24.00 V). Anything else
-gets a standard Modbus exception response.
+The values are simulated constants: 25.0 C, 1.500 A, 24.00 V and
+2021-06-20 13:25:42. Anything else gets a standard Modbus exception response.
+
+A response is `5 + 2N` bytes for `N` registers, so single-register reads fit in
+one eight-byte CAN frame but the six-register datetime read does not. Its
+17-byte response is split across three CAN frames, which the receiver has to
+reassemble.
 
 ## CS-CANET100 converter
 

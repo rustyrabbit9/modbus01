@@ -5,6 +5,7 @@
 
 /**
  *  CAN ID is added by the converter, outside the CRC. CRC is low byte first.
+ *  reg num is 1..6; bytes num is 2 x reg num, and reg value grows to match.
  *
  *  Example:
  *  Request
@@ -22,7 +23,8 @@
 #define MODBUS_RX_RING_SIZE        64U
 #define MODBUS_UART_TIMEOUT_MS     100U
 #define MODBUS_RESPONSE_DELAY_MS   30U
-#define MODBUS_MAX_RESPONSE_SIZE   7U
+#define MODBUS_MAX_REGISTERS_PER_READ 6U
+#define MODBUS_MAX_RESPONSE_SIZE   (5U + (2U * MODBUS_MAX_REGISTERS_PER_READ))
 #define CAN_ID_PREFIX_SIZE         2U
 
 /* Single response ID for every reply, data and exception alike. */
@@ -32,10 +34,22 @@
 #define HOLDING_REGISTER_CURRENT     0x0001U
 #define HOLDING_REGISTER_VOLTAGE     0x0002U
 
+/* Six consecutive registers: year, month, day, hour, minute, second. */
+#define HOLDING_REGISTER_DATETIME    0x4002U
+#define DATETIME_REGISTER_COUNT      6U
+
 /* Fixed simulated values: 25.0 C, 1.500 A and 24.00 V. */
 #define SIMULATED_TEMPERATURE      250U
 #define SIMULATED_CURRENT_MA       1500U
 #define SIMULATED_VOLTAGE_CENTIVOLT 2400U
+
+/* Fixed simulated timestamp: 2021-06-20 13:25:42. */
+#define SIMULATED_DATETIME_YEAR    2021U
+#define SIMULATED_DATETIME_MONTH      6U
+#define SIMULATED_DATETIME_DAY       20U
+#define SIMULATED_DATETIME_HOUR      13U
+#define SIMULATED_DATETIME_MINUTE    25U
+#define SIMULATED_DATETIME_SECOND    42U
 
 #define MODBUS_CRC16_INITIAL_VALUE  0xFFFFU
 #define MODBUS_CRC16_POLYNOMIAL     0xA001U
@@ -119,13 +133,53 @@ static void Modbus_SendException(uint8_t function, uint8_t exception_code)
   Modbus_Send(response, sizeof(response));
 }
 
+/* Returns 0 for an address that is not mapped, 1 after storing its value. */
+static uint8_t Modbus_ReadRegister(uint16_t address, uint16_t *value)
+{
+  static const uint16_t datetime[DATETIME_REGISTER_COUNT] = {
+    SIMULATED_DATETIME_YEAR,
+    SIMULATED_DATETIME_MONTH,
+    SIMULATED_DATETIME_DAY,
+    SIMULATED_DATETIME_HOUR,
+    SIMULATED_DATETIME_MINUTE,
+    SIMULATED_DATETIME_SECOND,
+  };
+
+  if ((address >= HOLDING_REGISTER_DATETIME) &&
+      (address < (HOLDING_REGISTER_DATETIME + DATETIME_REGISTER_COUNT)))
+  {
+    *value = datetime[address - HOLDING_REGISTER_DATETIME];
+    return 1U;
+  }
+
+  switch (address)
+  {
+    case HOLDING_REGISTER_TEMPERATURE:
+      *value = SIMULATED_TEMPERATURE;
+      break;
+
+    case HOLDING_REGISTER_CURRENT:
+      *value = SIMULATED_CURRENT_MA;
+      break;
+
+    case HOLDING_REGISTER_VOLTAGE:
+      *value = SIMULATED_VOLTAGE_CENTIVOLT;
+      break;
+
+    default:
+      return 0U;
+  }
+
+  return 1U;
+}
+
 static void Modbus_ProcessRequest(const uint8_t *frame)
 {
   uint16_t register_address;
   uint16_t register_count;
-  uint16_t register_value;
+  uint16_t data_length;
   uint16_t crc;
-  uint8_t response[7];
+  uint8_t response[MODBUS_MAX_RESPONSE_SIZE];
 
   if (frame[0] != MODBUS_SLAVE_ADDRESS)
   {
@@ -141,40 +195,38 @@ static void Modbus_ProcessRequest(const uint8_t *frame)
   register_address = ((uint16_t)frame[2] << 8U) | frame[3];
   register_count = ((uint16_t)frame[4] << 8U) | frame[5];
 
-  if (register_count != 1U)
+  if ((register_count == 0U) ||
+      (register_count > MODBUS_MAX_REGISTERS_PER_READ))
   {
     Modbus_SendException(frame[1], 0x03U);
     return;
   }
 
-  switch (register_address)
-  {
-    case HOLDING_REGISTER_TEMPERATURE:
-      register_value = SIMULATED_TEMPERATURE;
-      break;
-
-    case HOLDING_REGISTER_CURRENT:
-      register_value = SIMULATED_CURRENT_MA;
-      break;
-
-    case HOLDING_REGISTER_VOLTAGE:
-      register_value = SIMULATED_VOLTAGE_CENTIVOLT;
-      break;
-
-    default:
-      Modbus_SendException(frame[1], 0x02U);
-      return;
-  }
-
+  /* Response, offsets 2..: address, function, byte count, data, CRC. */
+  data_length = (uint16_t)(register_count * 2U);
   response[0] = MODBUS_SLAVE_ADDRESS;
   response[1] = MODBUS_READ_HOLDING_REGISTERS;
-  response[2] = 2U;
-  response[3] = (uint8_t)(register_value >> 8U);
-  response[4] = (uint8_t)(register_value & 0x00FFU);
-  crc = Modbus_Crc16(response, 5U);
-  response[5] = (uint8_t)(crc & 0x00FFU);
-  response[6] = (uint8_t)(crc >> 8U);
-  Modbus_Send(response, sizeof(response));
+  response[2] = (uint8_t)data_length;
+
+  for (uint16_t index = 0U; index < register_count; ++index)
+  {
+    uint16_t register_value;
+
+    if (Modbus_ReadRegister((uint16_t)(register_address + index),
+                            &register_value) == 0U)
+    {
+      Modbus_SendException(frame[1], 0x02U);
+      return;
+    }
+
+    response[3U + (index * 2U)] = (uint8_t)(register_value >> 8U);
+    response[4U + (index * 2U)] = (uint8_t)(register_value & 0x00FFU);
+  }
+
+  crc = Modbus_Crc16(response, (uint16_t)(3U + data_length));
+  response[3U + data_length] = (uint8_t)(crc & 0x00FFU);
+  response[4U + data_length] = (uint8_t)(crc >> 8U);
+  Modbus_Send(response, (uint16_t)(5U + data_length));
 }
 
 void ModbusSlave_Init(UART_HandleTypeDef *uart)
