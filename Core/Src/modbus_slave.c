@@ -4,17 +4,17 @@
 #include <string.h>
 
 /**
- *  CAN ID is added by the converter, outside the CRC. CRC is low byte first.
+ *  CRC is low byte first.
  *  reg num is 1..6; bytes num is 2 x reg num, and reg value grows to match.
  *
  *  Example:
  *  Request
- *  CAN ID | slave addr | func | start reg addr | reg num | crc
- *  0220   | 01         | 03   | 00 02          | 00 01   | 25 CA
+ *  slave addr | func | start reg addr | reg num | crc
+ *  01         | 03   | 00 02          | 00 01   | 25 CA
  *
  *  Response
- *  CAN ID | slave addr | func | bytes num | reg value | crc
- *  0333   | 01         | 03   | 02        | 09 60     | BE 3C
+ *  slave addr | func | bytes num | reg value | crc
+ *  01         | 03   | 02        | 09 60     | BE 3C
  */
 
 #define MODBUS_SLAVE_ADDRESS       1U
@@ -25,10 +25,6 @@
 #define MODBUS_RESPONSE_DELAY_MS   30U
 #define MODBUS_MAX_REGISTERS_PER_READ 6U
 #define MODBUS_MAX_RESPONSE_SIZE   (5U + (2U * MODBUS_MAX_REGISTERS_PER_READ))
-#define CAN_ID_PREFIX_SIZE         2U
-
-/* Single response ID for every reply, data and exception alike. */
-#define RESPONSE_CAN_ID            0x0333U
 
 #define HOLDING_REGISTER_TEMPERATURE 0x0000U
 #define HOLDING_REGISTER_CURRENT     0x0001U
@@ -87,28 +83,11 @@ static uint16_t Modbus_Crc16(const uint8_t *data, uint16_t length)
 
 static void Modbus_Send(const uint8_t *data, uint16_t length)
 {
-  uint8_t serial_frame[CAN_ID_PREFIX_SIZE + MODBUS_MAX_RESPONSE_SIZE];
-
-  if (length > MODBUS_MAX_RESPONSE_SIZE)
-  {
-    return;
-  }
-
-  /*
-   * CS-CANET100 "transparent conversion with identifier" consumes the first
-   * two serial bytes as a standard CAN ID. They are not part of the CAN
-   * payload, so the receiver still sees an unmodified Modbus RTU response.
-   */
-  serial_frame[0] = (uint8_t)(RESPONSE_CAN_ID >> 8U);
-  serial_frame[1] = (uint8_t)(RESPONSE_CAN_ID & 0x00FFU);
-  memcpy(&serial_frame[CAN_ID_PREFIX_SIZE], data, length);
-
   /* Let a short burst of CAN-to-RS485 requests finish before driving the bus. */
   HAL_Delay(MODBUS_RESPONSE_DELAY_MS);
   HAL_GPIO_WritePin(RS485_DE_GPIO_Port, RS485_DE_Pin, GPIO_PIN_SET);
 
-  if (HAL_UART_Transmit(modbus_uart, serial_frame,
-                        length + CAN_ID_PREFIX_SIZE,
+  if (HAL_UART_Transmit(modbus_uart, data, length,
                         MODBUS_UART_TIMEOUT_MS) == HAL_OK)
   {
     while (__HAL_UART_GET_FLAG(modbus_uart, UART_FLAG_TC) == RESET)
@@ -243,11 +222,6 @@ void ModbusSlave_Init(UART_HandleTypeDef *uart)
   }
 }
 
-/*
- * The converter prefixes each inbound frame with its two CAN ID bytes as well.
- * They are discarded by the CRC resynchronisation below, which slides the
- * window one byte at a time until the eight request bytes line up.
- */
 void ModbusSlave_Poll(void)
 {
   while (rx_tail != rx_head)
